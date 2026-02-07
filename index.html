@@ -2,21 +2,23 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Studio Pro V10 - Drag & Enter FX</title>
+    <title>Studio Pro V11 - Full Controls & Drag</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     <style>
         :root { --accent: #00d4ff; --bg: #0a0a0a; --fx: #ff0050; }
         body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 300px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; z-index: 10; }
+        .sidebar { width: 320px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; z-index: 10; }
         .main-stage { flex-grow: 1; display: flex; background: #000; justify-content: center; align-items: center; position: relative; }
         #canvas-container { width: 90%; aspect-ratio: 16 / 9; position: relative; background: #111; border: 2px solid #333; }
         canvas { width: 100%; height: 100%; cursor: move; }
         .card { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px; }
         h3 { font-size: 11px; margin: 0 0 8px 0; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid #333; }
-        input, button, select { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; font-size: 12px; margin-bottom: 5px; }
+        .card.fx h3 { color: var(--fx); }
+        input, button, select { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 6px; border-radius: 4px; font-size: 11px; margin-bottom: 4px; }
         .btn-start { background: #2ed573 !important; color: #000; font-weight: bold; }
         .btn-fx { background: var(--fx) !important; color: white; font-weight: bold; }
-        .layer-item { background: #111; padding: 6px; border-radius: 4px; margin-bottom: 5px; border-left: 3px solid #444; }
+        label { font-size: 9px; color: #888; display: block; margin-top: 2px; }
+        .layer-item { background: #111; padding: 8px; border-radius: 4px; margin-bottom: 5px; border-left: 3px solid #444; }
         .layer-item.on { border-left-color: #2ed573; }
     </style>
 </head>
@@ -24,18 +26,24 @@
 
 <div class="sidebar">
     <div class="card">
-        <h3>1. Camera Standard (Tasta C)</h3>
-        <button id="loadBtn" class="btn-start">START DEVICE</button>
+        <h3>1. Camera Standard (C)</h3>
+        <button id="loadBtn" class="btn-start">START CAMERA</button>
         <button id="toggleAI" class="btn-ai">AI CUT-OUT: OFF</button>
-        <label style="font-size:10px">Scalare</label>
+        <label>Scalare</label>
         <input type="range" id="camSize" min="10" max="250" value="80">
+        <label>Luminozitate</label>
+        <input type="range" id="camBright" min="0" max = "200" value="100">
     </div>
 
-    <div class="card" style="border-color: var(--fx)">
-        <h3>2. Shatter FX (Tasta ENTER)</h3>
-        <button id="toggleFX" class="btn-fx">EFFECT: OFF (ENTER)</button>
-        <label style="font-size:10px">Intensitate Tremurat</label>
+    <div class="card fx" style="border-color: var(--fx)">
+        <h3>2. Shatter FX (ENTER)</h3>
+        <button id="toggleFX" class="btn-fx">FX: OFF (ENTER)</button>
+        <label>Scalare FX</label>
+        <input type="range" id="fxSize" min="10" max="250" value="80">
+        <label>Intensitate Tremurat</label>
         <input type="range" id="fxPower" min="0" max="100" value="20">
+        <label>Transparenta</label>
+        <input type="range" id="fxAlpha" min="0" max="100" value="100">
     </div>
 
     <div class="card">
@@ -74,8 +82,8 @@
     let aiActive = false, fxActive = false, selectedObj = null;
     const renderW = 1920, renderH = 1080;
 
-    const camState = { id: 'cam1', x: 480, y: 540, s: 80, visible: true };
-    const fxState = { id: 'cam2', x: 1440, y: 540, s: 80, p: 20, visible: false };
+    const camState = { id: 'cam1', x: 480, y: 540, s: 80, b: 100, visible: true };
+    const fxState = { id: 'cam2', x: 1440, y: 540, s: 80, p: 20, a: 1, visible: false };
     const layers = [];
 
     // Init Layere
@@ -83,7 +91,12 @@
         layers[i] = { id: 'L'+i, visible: false, x: 960, y: 800, s: 30, el: null };
         const div = document.createElement('div');
         div.className = 'layer-item'; div.id = `ui-${i}`;
-        div.innerHTML = `<strong>L${i}</strong> <input type="file" id="f-${i}" accept="image/*,video/*">`;
+        div.innerHTML = `
+            <strong>Layer ${i}</strong> 
+            <input type="file" id="f-${i}" accept="image/*,video/*">
+            <label>Scalare Layer</label>
+            <input type="range" id="s-${i}" min="5" max="250" value="30">
+        `;
         document.getElementById('layerContainer').appendChild(div);
 
         document.getElementById(`f-${i}`).onchange = (e) => {
@@ -95,32 +108,24 @@
                 const img = new Image(); img.src = url; layers[i].el = img;
             }
         };
+        document.getElementById(`s-${i}`).oninput = (e) => layers[i].s = e.target.value;
     }
 
-    // --- LOGICA DRAG & DROP (FUNCTIONALA PENTRU TOT) ---
+    // --- DRAG LOGIC ---
     canvas.onmousedown = (e) => {
         const rect = canvas.getBoundingClientRect();
         const mx = (e.clientX - rect.left) * (renderW / rect.width);
         const my = (e.clientY - rect.top) * (renderH / rect.height);
-
         selectedObj = null;
-        // Verificăm întâi layerele (sunt deasupra)
-        for (let i = 5; i >= 1; i--) {
-            if (layers[i].visible && layers[i].el) {
-                if (isHit(mx, my, layers[i])) { selectedObj = layers[i]; return; }
-            }
-        }
-        // Verificăm camerele
+        for (let i = 5; i >= 1; i--) if (layers[i].visible && layers[i].el && isHit(mx, my, layers[i])) { selectedObj = layers[i]; return; }
         if (fxActive && isHit(mx, my, fxState)) { selectedObj = fxState; return; }
         if (camState.visible && isHit(mx, my, camState)) { selectedObj = camState; return; }
     };
-
     function isHit(mx, my, obj) {
         const w = renderW * (obj.s / 100);
         const h = w * 0.56; 
         return Math.abs(mx - obj.x) < w/2 && Math.abs(my - obj.y) < h/2;
     }
-
     window.onmousemove = (e) => {
         if (selectedObj) {
             const rect = canvas.getBoundingClientRect();
@@ -139,17 +144,14 @@
         canvas.width = renderW; canvas.height = renderH;
         ctx.clearRect(0, 0, renderW, renderH);
         
-        // Fundal
         const st = document.getElementById('bgSourceType').value;
         if(st === 'photo' && bgImg.src) ctx.drawImage(bgImg, 0, 0, renderW, renderH);
         else if(st === 'video' && bgVideo.readyState >= 2) ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
         else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH); }
 
-        // Camere
         if (camState.visible) drawCam(results, camState, false);
         if (fxActive) drawCam(results, fxState, true);
 
-        // Layere
         layers.forEach(l => {
             if(l.visible && l.el) {
                 const w = renderW * (l.s/100);
@@ -164,13 +166,13 @@
         const h = (video.videoHeight / video.videoWidth) * w || w * 0.56;
         let x = state.x - w/2;
         let y = state.y - h/2;
-
         ctx.save();
         if(isFX) {
+            ctx.globalAlpha = state.a;
             x += (Math.random() - 0.5) * state.p;
             y += (Math.random() - 0.5) * state.p;
         }
-        
+        ctx.filter = `brightness(${state.b || 100}%)`;
         if (aiActive && results.segmentationMask) {
             const off = document.createElement('canvas'); off.width = renderW; off.height = renderH;
             const oCtx = off.getContext('2d');
@@ -190,30 +192,25 @@
         requestAnimationFrame(processLoop);
     }
 
-    // TASTE
+    // --- UI EVENTS ---
     window.onkeydown = (e) => {
-        if(e.key === 'Enter') { 
-            e.preventDefault(); 
-            fxActive = !fxActive; 
-            document.getElementById('toggleFX').innerText = fxActive ? "FX: ON" : "FX: OFF (ENTER)";
-        }
+        if(e.key === 'Enter') { e.preventDefault(); fxActive = !fxActive; document.getElementById('toggleFX').innerText = fxActive ? "FX: ON" : "FX: OFF (ENTER)"; }
         if(e.key === 'c' || e.key === 'C') camState.visible = !camState.visible;
-        if(e.key >= 1 && e.key <= 5) {
-            layers[e.key].visible = !layers[e.key].visible;
-            document.getElementById(`ui-${e.key}`).classList.toggle('on');
-        }
+        if(e.key >= 1 && e.key <= 5) { layers[e.key].visible = !layers[e.key].visible; document.getElementById(`ui-${e.key}`).classList.toggle('on'); }
     };
-
     document.getElementById('loadBtn').onclick = async () => {
         const stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
         video.srcObject = stream; video.play(); processLoop();
     };
-    document.getElementById('toggleAI').onclick = () => { aiActive = !aiActive; document.getElementById('toggleAI').classList.toggle('active'); };
+    document.getElementById('toggleAI').onclick = () => { aiActive = !aiActive; document.getElementById('toggleAI').classList.toggle('active', aiActive); document.getElementById('toggleAI').innerText = aiActive ? "AI: ACTIV" : "AI: OFF"; };
     document.getElementById('camSize').oninput = (e) => camState.s = e.target.value;
+    document.getElementById('camBright').oninput = (e) => camState.b = e.target.value;
+    document.getElementById('fxSize').oninput = (e) => fxState.s = e.target.value;
     document.getElementById('fxPower').oninput = (e) => fxState.p = e.target.value;
+    document.getElementById('fxAlpha').oninput = (e) => fxState.a = e.target.value / 100;
     document.getElementById('bgSourceType').onchange = (e) => {
-        document.getElementById('bgPhotoInp').style.display = e.target.value === 'photo' ? 'block' : 'none';
-        document.getElementById('bgVideoInp').style.display = e.target.value === 'video' ? 'block' : 'none';
+        document.getElementById('photoInputWrap').style.display = e.target.value === 'photo' ? 'block' : 'none';
+        document.getElementById('videoInputWrap').style.display = e.target.value === 'video' ? 'block' : 'none';
     };
     document.getElementById('bgPhotoInp').onchange = (e) => bgImg.src = URL.createObjectURL(e.target.files[0]);
     document.getElementById('bgVideoInp').onchange = (e) => { bgVideo.src = URL.createObjectURL(e.target.files[0]); bgVideo.play(); };
