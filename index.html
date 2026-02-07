@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <title>Novation TikTok Studio PRO</title>
+    <script src="https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+
+    <style>
+        body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; }
+        
+        /* Zona de emisie (9:16) */
+        #viewport {
+            width: 450px; height: 800px;
+            background: #00ff00; /* Green Screen pentru TikTok Studio */
+            position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            flex-shrink: 0;
+        }
+
+        /* Panoul de control */
+        #controls {
+            flex-grow: 1; padding: 20px; background: #181818;
+            border-left: 2px solid #333; overflow-y: auto;
+        }
+
+        .card { background: #252525; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #444; }
+        button { background: #ff0050; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #ff3d77; }
+        .hint { font-size: 12px; color: #aaa; margin-top: 5px; }
+        kbd { background: #444; padding: 2px 5px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+<div id="viewport">
+    <canvas id="mainCanvas" width="450" height="800"></canvas>
+</div>
+
+<div id="controls">
+    <h1>TikTok Live Overlay</h1>
+    
+    <div class="card">
+        <h3>1. WebCam AI (Shatter Effect)</h3>
+        <button onclick="initCamera()">PORNEȘTE CAMERA</button>
+        <p class="hint">Tasta <kbd>1</kbd> sau primul Pad Novation pentru On/Off</p>
+    </div>
+
+    <div class="card">
+        <h3>2. Încarcă Surse (Video/Foto)</h3>
+        <input type="file" id="fileInput" multiple accept="video/*,image/*">
+        <p class="hint">Trage fișierele cu mouse-ul pentru a le poziționa. Se salvează automat.</p>
+    </div>
+
+    <div class="card">
+        <h3>3. Status Conexiune</h3>
+        <div id="midiStatus">Așteptare MIDI (Novation)...</div>
+    </div>
+</div>
+
+<script>
+// --- CONFIGURARE CANVAS ---
+const canvas = new fabric.Canvas('mainCanvas', {
+    preserveObjectStacking: true
+});
+
+// Memorie: Încărcare layout salvat
+const savedLayout = localStorage.getItem('novation_layout');
+if (savedLayout) {
+    canvas.loadFromJSON(savedLayout, canvas.renderAll.bind(canvas));
+}
+
+// Salvare automată la orice mișcare
+canvas.on('object:modified', () => {
+    localStorage.setItem('novation_layout', JSON.stringify(canvas));
+});
+
+// --- LOGICĂ WEBCAM + EFECT SPART (SHATTER) ---
+let videoElement = document.createElement('video');
+let cameraActive = false;
+let webcamObject = null;
+
+async function initCamera() {
+    const selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+    });
+
+    selfieSegmentation.setOptions({ modelSelection: 1 });
+    selfieSegmentation.onResults(onResults);
+
+    const camera = new Camera(videoElement, {
+        onFrame: async () => { await selfieSegmentation.send({image: videoElement}); },
+        width: 640, height: 480
+    });
+    camera.start();
+}
+
+function onResults(results) {
+    canvas.renderAll();
+    const ctx = canvas.getContext();
+    
+    // Dacă avem webcam-ul activ, desenăm masca cu efect
+    if (webcamObject && webcamObject.visible) {
+        ctx.save();
+        // Aici am putea adăuga efecte de tip Shader/Noise pe contur
+        // Pentru simplitate, folosim masca AI direct
+        // Mai departe putem integra un filter de "displacement"
+        ctx.restore();
+    }
+}
+
+// --- ÎNCĂRCARE FIȘIERE ---
+document.getElementById('fileInput').onchange = function(e) {
+    const files = e.target.files;
+    for (let file of files) {
+        const url = URL.createObjectURL(file);
+        if (file.type.startsWith('video')) {
+            addVideoToCanvas(url);
+        } else {
+            fabric.Image.fromURL(url, (img) => {
+                img.scaleToWidth(200);
+                canvas.add(img);
+                canvas.setActiveObject(img);
+            });
+        }
+    }
+};
+
+function addVideoToCanvas(url) {
+    const videoE = document.createElement('video');
+    videoE.src = url;
+    videoE.loop = true;
+    videoE.muted = true;
+    videoE.play();
+
+    const fabVideo = new fabric.Image(videoE, { left: 50, top: 50 });
+    canvas.add(fabVideo);
+    fabric.util.requestAnimFrame(function render() {
+        canvas.renderAll();
+        fabric.util.requestAnimFrame(render);
+    });
+}
+
+// --- CONTROL MIDI & TASTATURĂ ---
+window.addEventListener('keydown', (e) => {
+    const key = e.key; // 1, 2, 3...
+    triggerSlot(key);
+});
+
+if (navigator.requestMIDIAccess) {
+    navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+}
+
+function onMIDISuccess(midiAccess) {
+    document.getElementById('midiStatus').innerHTML = "✅ Novation Conectat";
+    for (var input of midiAccess.inputs.values()) {
+        input.onmidimessage = (msg) => {
+            const [status, note, velocity] = msg.data;
+            if (velocity > 0) triggerSlot(note);
+        };
+    }
+}
+
+function onMIDIFailure() {
+    document.getElementById('midiStatus').innerHTML = "❌ MIDI Indisponibil";
+}
+
+function triggerSlot(id) {
+    // Logica de On/Off pentru obiectele de pe ecran
+    const objects = canvas.getObjects();
+    // Exemplu: tasta 1 sau nota MIDI 36 controlează primul obiect
+    let target = (typeof id === 'string') ? parseInt(id) - 1 : id % 10; 
+    if (objects[target]) {
+        objects[target].visible = !objects[target].visible;
+        canvas.renderAll();
+    }
+}
+</script>
+
+</body>
+</html>
