@@ -2,10 +2,10 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Studio Pro V11 - Full Controls & Drag</title>
+    <title>Studio Pro V12 - Chroma & Upload Background</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     <style>
-        :root { --accent: #00d4ff; --bg: #0a0a0a; --fx: #ff0050; }
+        :root { --accent: #00d4ff; --bg: #0a0a0a; --fx: #ff0050; --chroma: #00ff00; }
         body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
         .sidebar { width: 320px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; z-index: 10; }
         .main-stage { flex-grow: 1; display: flex; background: #000; justify-content: center; align-items: center; position: relative; }
@@ -15,8 +15,8 @@
         h3 { font-size: 11px; margin: 0 0 8px 0; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid #333; }
         .card.fx h3 { color: var(--fx); }
         input, button, select { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 6px; border-radius: 4px; font-size: 11px; margin-bottom: 4px; }
-        .btn-start { background: #2ed573 !important; color: #000; font-weight: bold; }
-        .btn-fx { background: var(--fx) !important; color: white; font-weight: bold; }
+        .btn-start { background: #2ed573 !important; color: #000; font-weight: bold; cursor: pointer; }
+        .btn-fx { background: var(--fx) !important; color: white; font-weight: bold; cursor: pointer; }
         label { font-size: 9px; color: #888; display: block; margin-top: 2px; }
         .layer-item { background: #111; padding: 8px; border-radius: 4px; margin-bottom: 5px; border-left: 3px solid #444; }
         .layer-item.on { border-left-color: #2ed573; }
@@ -27,12 +27,12 @@
 <div class="sidebar">
     <div class="card">
         <h3>1. Camera Standard (C)</h3>
-        <button id="loadBtn" class="btn-start">START CAMERA</button>
+        <button id="loadBtn" class="btn-start">START DEVICE</button>
         <button id="toggleAI" class="btn-ai">AI CUT-OUT: OFF</button>
         <label>Scalare</label>
         <input type="range" id="camSize" min="10" max="250" value="80">
         <label>Luminozitate</label>
-        <input type="range" id="camBright" min="0" max = "200" value="100">
+        <input type="range" id="camBright" min="0" max="200" value="100">
     </div>
 
     <div class="card fx" style="border-color: var(--fx)">
@@ -50,11 +50,16 @@
         <h3>3. Fundal Studio</h3>
         <select id="bgSourceType">
             <option value="none">Negru</option>
-            <option value="photo">Foto</option>
-            <option value="video">Video</option>
+            <option value="green">Verde (Chroma)</option>
+            <option value="photo">Foto Upload</option>
+            <option value="video">Video Upload</option>
         </select>
-        <input type="file" id="bgPhotoInp" style="display:none">
-        <input type="file" id="bgVideoInp" style="display:none">
+        
+        <div id="bgUploadArea">
+            <input type="file" id="bgPhotoInp" accept="image/*" style="display:none">
+            <input type="file" id="bgVideoInp" accept="video/*" style="display:none">
+        </div>
+        <p style="font-size: 9px; color: #666;">Dacă alegi Foto/Video, butonul de upload apare automat.</p>
     </div>
 
     <div id="layerContainer">
@@ -144,14 +149,23 @@
         canvas.width = renderW; canvas.height = renderH;
         ctx.clearRect(0, 0, renderW, renderH);
         
+        // LOGICA FUNDAL
         const st = document.getElementById('bgSourceType').value;
-        if(st === 'photo' && bgImg.src) ctx.drawImage(bgImg, 0, 0, renderW, renderH);
-        else if(st === 'video' && bgVideo.readyState >= 2) ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
-        else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH); }
+        if(st === 'green') {
+            ctx.fillStyle = "#00ff00"; ctx.fillRect(0,0,renderW,renderH);
+        } else if(st === 'photo' && bgImg.src) {
+            ctx.drawImage(bgImg, 0, 0, renderW, renderH);
+        } else if(st === 'video' && bgVideo.readyState >= 2) {
+            ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
+        } else {
+            ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH);
+        }
 
+        // Camere
         if (camState.visible) drawCam(results, camState, false);
         if (fxActive) drawCam(results, fxState, true);
 
+        // Layere
         layers.forEach(l => {
             if(l.visible && l.el) {
                 const w = renderW * (l.s/100);
@@ -198,22 +212,43 @@
         if(e.key === 'c' || e.key === 'C') camState.visible = !camState.visible;
         if(e.key >= 1 && e.key <= 5) { layers[e.key].visible = !layers[e.key].visible; document.getElementById(`ui-${e.key}`).classList.toggle('on'); }
     };
+
     document.getElementById('loadBtn').onclick = async () => {
         const stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
         video.srcObject = stream; video.play(); processLoop();
     };
-    document.getElementById('toggleAI').onclick = () => { aiActive = !aiActive; document.getElementById('toggleAI').classList.toggle('active', aiActive); document.getElementById('toggleAI').innerText = aiActive ? "AI: ACTIV" : "AI: OFF"; };
+
+    document.getElementById('toggleAI').onclick = () => {
+        aiActive = !aiActive;
+        document.getElementById('toggleAI').innerText = aiActive ? "AI: ACTIV" : "AI: OFF";
+    };
+
+    // LOGICA FUNDAL SELECTOR
+    document.getElementById('bgSourceType').onchange = (e) => {
+        const val = e.target.value;
+        document.getElementById('bgPhotoInp').style.display = (val === 'photo') ? 'block' : 'none';
+        document.getElementById('bgVideoInp').style.display = (val === 'video') ? 'block' : 'none';
+    };
+
+    document.getElementById('bgPhotoInp').onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) bgImg.src = URL.createObjectURL(file);
+    };
+
+    document.getElementById('bgVideoInp').onchange = (e) => {
+        const file = e.target.files[0];
+        if(file) {
+            bgVideo.src = URL.createObjectURL(file);
+            bgVideo.play();
+        }
+    };
+
+    // Slidere Camere
     document.getElementById('camSize').oninput = (e) => camState.s = e.target.value;
     document.getElementById('camBright').oninput = (e) => camState.b = e.target.value;
     document.getElementById('fxSize').oninput = (e) => fxState.s = e.target.value;
     document.getElementById('fxPower').oninput = (e) => fxState.p = e.target.value;
     document.getElementById('fxAlpha').oninput = (e) => fxState.a = e.target.value / 100;
-    document.getElementById('bgSourceType').onchange = (e) => {
-        document.getElementById('photoInputWrap').style.display = e.target.value === 'photo' ? 'block' : 'none';
-        document.getElementById('videoInputWrap').style.display = e.target.value === 'video' ? 'block' : 'none';
-    };
-    document.getElementById('bgPhotoInp').onchange = (e) => bgImg.src = URL.createObjectURL(e.target.files[0]);
-    document.getElementById('bgVideoInp').onchange = (e) => { bgVideo.src = URL.createObjectURL(e.target.files[0]); bgVideo.play(); };
 </script>
 </body>
 </html>
