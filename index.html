@@ -2,22 +2,34 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Studio Pro V9 - Shatter FX & Dual Cam</title>
+    <title>Studio Pro V9 - Dual Cam Shatter Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     <style>
-        :root { --accent: #ff0050; --bg: #0a0a0a; }
+        :root { --accent: #00d4ff; --bg: #0a0a0a; --fx: #ff0050; }
         body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
-        .sidebar { width: 320px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; z-index: 10; }
+        
+        .sidebar { width: 300px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; z-index: 10; }
         .main-stage { flex-grow: 1; display: flex; background: #000; justify-content: center; align-items: center; position: relative; }
-        #canvas-container { width: 90%; aspect-ratio: 16 / 9; position: relative; background: #111; border: 2px solid #333; }
-        canvas { width: 100%; height: 100%; }
+        
+        #canvas-container { width: 90%; aspect-ratio: 16 / 9; position: relative; background: #111; border: 2px solid #333; box-shadow: 0 0 40px rgba(0,0,0,0.8); }
+        canvas { width: 100%; height: 100%; cursor: move; }
+
         .card { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px; }
+        .card.fx { border-color: var(--fx); }
         h3 { font-size: 11px; margin: 0 0 8px 0; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 4px; }
-        input, button, select { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; font-size: 12px; margin-bottom: 5px; }
-        .btn-start { background: #2ed573 !important; color: black; font-weight: bold; }
-        .btn-fx { background: #ff4757 !important; color: white; font-weight: bold; }
+        .card.fx h3 { color: var(--fx); }
+        
+        select, input, button { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; font-size: 12px; margin-bottom: 5px; }
+        .btn-start { background: #2ed573 !important; color: #000; font-weight: bold; cursor: pointer; }
+        .btn-ai { background: #444; color: white; font-weight: bold; cursor: pointer; }
+        .btn-ai.active { background: #2ed573; color: black; }
+        .btn-fx { background: var(--fx) !important; color: white; font-weight: bold; cursor: pointer; }
+        
+        .layer-item { background: #111; padding: 6px; border-radius: 4px; margin-bottom: 5px; border-left: 3px solid #444; }
+        .layer-item.on { border-left-color: #2ed573; }
+        
+        .fs-btn { position: absolute; bottom: 20px; right: 20px; background: rgba(0,212,255,0.4); color: white; padding: 10px 20px; border-radius: 30px; border: 1px solid #00d4ff; cursor: pointer; font-weight: bold; transition: 0.3s; }
         label { font-size: 10px; color: #888; display: block; margin-top: 5px; }
-        .fs-btn { position: absolute; bottom: 20px; right: 20px; background: rgba(255,0,80,0.4); color: white; padding: 10px 20px; border-radius: 30px; border: 1px solid #ff0050; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -25,35 +37,42 @@
 <div class="sidebar">
     <div class="card">
         <h3>1. Camera Standard (Tasta C)</h3>
-        <button id="loadBtn" class="btn-start">START CAMERA</button>
+        <button id="loadBtn" class="btn-start">START DEVICE</button>
         <button id="toggleAI" class="btn-ai">AI CUT-OUT: OFF</button>
-        <label>Scalare & Luminozitate</label>
+        <label>Scalare</label>
         <input type="range" id="camSize" min="10" max="250" value="80">
+        <label>Luminozitate</label>
         <input type="range" id="camBright" min="0" max="200" value="100">
     </div>
 
-    <div class="card">
+    <div class="card fx">
         <h3>2. Camera Shatter FX (Tasta X)</h3>
-        <button id="toggleFX" class="btn-fx">SHATTER FX: OFF</button>
+        <button id="toggleFX" class="btn-fx">SHATTER EFFECT: OFF</button>
+        <label>Scalare FX</label>
+        <input type="range" id="fxSize" min="10" max="250" value="80">
         <label>Intensitate Shatter</label>
-        <input type="range" id="fxPower" min="0" max="50" value="10">
-        <label>Transparență FX</label>
+        <input type="range" id="fxPower" min="0" max="100" value="20">
+        <label>Transparenta</label>
         <input type="range" id="fxAlpha" min="0" max="100" value="100">
     </div>
 
     <div class="card">
         <h3>3. Fundal Studio</h3>
         <select id="bgSourceType">
-            <option value="none">Negru</option>
-            <option value="photo">Imagine</option>
-            <option value="video">Video</option>
+            <option value="none">Fără fundal (Negru)</option>
+            <option value="photo">Foto Fundal</option>
+            <option value="video">Video Fundal</option>
         </select>
-        <input type="file" id="bgPhotoInp" style="display:none">
-        <input type="file" id="bgVideoInp" style="display:none">
+        <div id="photoInputWrap" style="display:none; margin-top:10px;">
+            <input type="file" id="bgPhotoInp" accept="image/*">
+        </div>
+        <div id="videoInputWrap" style="display:none; margin-top:10px;">
+            <input type="file" id="bgVideoInp" accept="video/*">
+        </div>
     </div>
 
     <div id="layerContainer">
-        <h3>4. Obiecte (Taste 1-5)</h3>
+        <h3>4. Layere (Taste 1-5)</h3>
     </div>
 </div>
 
@@ -76,13 +95,34 @@
     const bgImg = document.getElementById('img_bg');
     
     let aiActive = false, fxActive = false, selectedLayer = null;
-    const renderW = 1920, renderH = 1080;
+    const renderW = 1920;
+    const renderH = 1080;
 
-    const camState = { x: 400, y: 540, s: 80, b: 100, visible: true };
-    const fxState = { x: 1400, y: 540, s: 80, power: 10, alpha: 1, visible: false };
+    const camState = { x: 480, y: 540, s: 80, b: 100, visible: true };
+    const fxState = { x: 1440, y: 540, s: 80, b: 100, p: 20, a: 1, visible: false };
     const layers = [];
 
-    // Setup MediaPipe
+    // Init Layere
+    for (let i = 1; i <= 5; i++) {
+        layers[i] = { visible: false, x: 960, y: 800, s: 30, el: null };
+        const div = document.createElement('div');
+        div.className = 'layer-item'; div.id = `ui-${i}`;
+        div.innerHTML = `<strong>L${i}</strong> <input type="file" id="f-${i}" accept="image/*,video/*">
+                         <input type="range" id="s-${i}" min="5" max="200" value="30">`;
+        document.getElementById('layerContainer').appendChild(div);
+
+        document.getElementById(`f-${i}`).onchange = (e) => {
+            const file = e.target.files[0];
+            const url = URL.createObjectURL(file);
+            if(file.type.startsWith('video')) {
+                const v = document.createElement('video'); v.src = url; v.loop=true; v.muted=true; v.play(); layers[i].el = v;
+            } else {
+                const img = new Image(); img.src = url; layers[i].el = img;
+            }
+        };
+        document.getElementById(`s-${i}`).oninput = (e) => layers[i].s = e.target.value;
+    }
+
     const selfie = new SelfieSegmentation({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`});
     selfie.setOptions({ modelSelection: 1 });
     selfie.onResults(onResults);
@@ -90,26 +130,20 @@
     function onResults(results) {
         canvas.width = renderW; canvas.height = renderH;
         ctx.clearRect(0, 0, renderW, renderH);
-
-        // 1. Randare Fundal
-        const bgType = document.getElementById('bgSourceType').value;
-        if(bgType === 'photo' && bgImg.src) ctx.drawImage(bgImg, 0, 0, renderW, renderH);
-        else if(bgType === 'video' && bgVideo.readyState >= 2) ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
+        
+        // 1. Fundal
+        const sourceType = document.getElementById('bgSourceType').value;
+        if(sourceType === 'photo' && bgImg.src) ctx.drawImage(bgImg, 0, 0, renderW, renderH);
+        else if(sourceType === 'video' && bgVideo.readyState >= 2) ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
         else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH); }
 
-        // 2. Randare Camera Standard
-        if(camState.visible) {
-            drawCamera(ctx, results, camState, false);
-        }
+        // 2. Deseneaza Camerele
+        if (camState.visible) drawCam(results, camState, false);
+        if (fxActive) drawCam(results, fxState, true);
 
-        // 3. Randare Camera Shatter FX
-        if(fxActive) {
-            drawCamera(ctx, results, fxState, true);
-        }
-
-        // 4. Randare Layere (Obiecte)
+        // 3. Layere
         layers.forEach(l => {
-            if(l && l.visible && l.el) {
+            if(l.visible && l.el) {
                 const w = renderW * (l.s/100);
                 const h = (l.el.videoHeight || l.el.height) / (l.el.videoWidth || l.el.width) * w;
                 ctx.drawImage(l.el, l.x - w/2, l.y - h/2, w, h);
@@ -117,47 +151,52 @@
         });
     }
 
-    function drawCamera(targetCtx, results, state, isFX) {
-        const w = renderW * (state.s / 100);
-        const h = (video.videoHeight / video.videoWidth) * w || w * 0.56;
-        let x = state.x - w/2;
-        let y = state.y - h/2;
+    function drawCam(results, state, isFX) {
+        const drawW = renderW * (state.s / 100);
+        const drawH = (video.videoHeight / video.videoWidth) * drawW || drawW * 0.56;
+        let x = state.x - drawW/2;
+        let y = state.y - drawH/2;
 
-        targetCtx.save();
+        ctx.save();
         if(isFX) {
-            targetCtx.globalAlpha = state.alpha;
-            // Efectul Shatter (Distorsiune aleatorie)
-            x += (Math.random() - 0.5) * state.power;
-            y += (Math.random() - 0.5) * state.power;
+            ctx.globalAlpha = state.a;
+            // Efect Shatter (pozitie random mica rapida)
+            x += (Math.random() - 0.5) * state.p;
+            y += (Math.random() - 0.5) * state.p;
         }
+        
+        ctx.filter = `brightness(${state.b}%)`;
 
         if (aiActive && results.segmentationMask) {
-            // Desenare cu decupaj AI
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = renderW; tempCanvas.height = renderH;
-            const tCtx = tempCanvas.getContext('2d');
-            
-            tCtx.drawImage(results.image, x, y, w, h);
-            tCtx.globalCompositeOperation = 'destination-in';
-            tCtx.drawImage(results.segmentationMask, x, y, w, h);
-            
-            targetCtx.drawImage(tempCanvas, 0, 0);
+            const off = document.createElement('canvas');
+            off.width = renderW; off.height = renderH;
+            const oCtx = off.getContext('2d');
+            oCtx.drawImage(results.image, x, y, drawW, drawH);
+            oCtx.globalCompositeOperation = 'destination-in';
+            oCtx.drawImage(results.segmentationMask, x, y, drawW, drawH);
+            ctx.drawImage(off, 0, 0);
         } else {
-            targetCtx.drawImage(video, x, y, w, h);
+            ctx.drawImage(video, x, y, drawW, drawH);
         }
-        targetCtx.restore();
+        ctx.restore();
     }
 
-    // Loop procesare
     async function processLoop() {
         if(video.readyState >= 2) await selfie.send({image: video});
+        else onResults({});
         requestAnimationFrame(processLoop);
     }
 
-    // Handlers
+    // UI & Taste
     document.getElementById('loadBtn').onclick = async () => {
         const stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
-        video.srcObject = stream; processLoop();
+        video.srcObject = stream; video.play(); processLoop();
+    };
+
+    document.getElementById('toggleAI').onclick = () => {
+        aiActive = !aiActive;
+        document.getElementById('toggleAI').innerText = aiActive ? "AI: ACTIV" : "AI: OFF";
+        document.getElementById('toggleAI').classList.toggle('active', aiActive);
     };
 
     document.getElementById('toggleFX').onclick = () => {
@@ -165,39 +204,31 @@
         document.getElementById('toggleFX').innerText = fxActive ? "SHATTER: ON" : "SHATTER: OFF";
     };
 
-    document.getElementById('fxPower').oninput = (e) => fxState.power = e.target.value;
-    document.getElementById('fxAlpha').oninput = (e) => fxState.alpha = e.target.value / 100;
-    document.getElementById('camSize').oninput = (e) => camState.s = e.target.value;
-    
-    // Taste rapide
     window.onkeydown = (e) => {
         if(e.key === 'c') camState.visible = !camState.visible;
         if(e.key === 'x') fxActive = !fxActive;
         if(e.key >= 1 && e.key <= 5) {
-            if(layers[e.key]) layers[e.key].visible = !layers[e.key].visible;
+            layers[e.key].visible = !layers[e.key].visible;
+            document.getElementById(`ui-${e.key}`).classList.toggle('on');
         }
     };
 
-    // Inițializare Layere (1-5)
-    for (let i = 1; i <= 5; i++) {
-        layers[i] = { visible: false, x: 960, y: 540, s: 30, el: null };
-        const div = document.createElement('div');
-        div.className = 'card';
-        div.innerHTML = `<h3>Layer ${i}</h3><input type="file" onchange="loadLayer(event, ${i})">`;
-        document.getElementById('layerContainer').appendChild(div);
-    }
-
-    function loadLayer(e, i) {
-        const file = e.target.files[0];
-        const url = URL.createObjectURL(file);
-        const img = new Image(); img.src = url; layers[i].el = img;
-    }
+    // Slidere
+    document.getElementById('camSize').oninput = (e) => camState.s = e.target.value;
+    document.getElementById('camBright').oninput = (e) => camState.b = e.target.value;
+    document.getElementById('fxSize').oninput = (e) => fxState.s = e.target.value;
+    document.getElementById('fxPower').oninput = (e) => fxState.p = e.target.value;
+    document.getElementById('fxAlpha').oninput = (e) => fxState.a = e.target.value / 100;
 
     document.getElementById('bgSourceType').onchange = (e) => {
         const val = e.target.value;
-        document.getElementById('bgPhotoInp').style.display = val === 'photo' ? 'block' : 'none';
-        document.getElementById('bgVideoInp').style.display = val === 'video' ? 'block' : 'none';
+        document.getElementById('photoInputWrap').style.display = (val === 'photo') ? 'block' : 'none';
+        document.getElementById('videoInputWrap').style.display = (val === 'video') ? 'block' : 'none';
     };
+
+    document.getElementById('bgPhotoInp').onchange = (e) => { bgImg.src = URL.createObjectURL(e.target.files[0]); };
+    document.getElementById('bgVideoInp').onchange = (e) => { bgVideo.src = URL.createObjectURL(e.target.files[0]); bgVideo.play(); };
+    document.getElementById('fsBtn').onclick = () => document.getElementById('canvas-container').requestFullscreen();
 </script>
 </body>
 </html>
