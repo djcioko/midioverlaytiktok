@@ -2,180 +2,202 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <title>Novation TikTok Studio PRO</title>
-    <script src="https://unpkg.com/fabric@5.3.0/dist/fabric.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-
+    <title>Studio Pro V9 - Shatter FX & Dual Cam</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
     <style>
-        body { margin: 0; background: #0a0a0a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; }
-        
-        /* Zona de emisie (9:16) */
-        #viewport {
-            width: 450px; height: 800px;
-            background: #00ff00; /* Green Screen pentru TikTok Studio */
-            position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            flex-shrink: 0;
-        }
-
-        /* Panoul de control */
-        #controls {
-            flex-grow: 1; padding: 20px; background: #181818;
-            border-left: 2px solid #333; overflow-y: auto;
-        }
-
-        .card { background: #252525; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #444; }
-        button { background: #ff0050; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #ff3d77; }
-        .hint { font-size: 12px; color: #aaa; margin-top: 5px; }
-        kbd { background: #444; padding: 2px 5px; border-radius: 3px; }
+        :root { --accent: #ff0050; --bg: #0a0a0a; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 320px; background: #151515; border-right: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; z-index: 10; }
+        .main-stage { flex-grow: 1; display: flex; background: #000; justify-content: center; align-items: center; position: relative; }
+        #canvas-container { width: 90%; aspect-ratio: 16 / 9; position: relative; background: #111; border: 2px solid #333; }
+        canvas { width: 100%; height: 100%; }
+        .card { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #333; margin-bottom: 5px; }
+        h3 { font-size: 11px; margin: 0 0 8px 0; color: var(--accent); text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 4px; }
+        input, button, select { width: 100%; background: #000; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; font-size: 12px; margin-bottom: 5px; }
+        .btn-start { background: #2ed573 !important; color: black; font-weight: bold; }
+        .btn-fx { background: #ff4757 !important; color: white; font-weight: bold; }
+        label { font-size: 10px; color: #888; display: block; margin-top: 5px; }
+        .fs-btn { position: absolute; bottom: 20px; right: 20px; background: rgba(255,0,80,0.4); color: white; padding: 10px 20px; border-radius: 30px; border: 1px solid #ff0050; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div id="viewport">
-    <canvas id="mainCanvas" width="450" height="800"></canvas>
+<div class="sidebar">
+    <div class="card">
+        <h3>1. Camera Standard (Tasta C)</h3>
+        <button id="loadBtn" class="btn-start">START CAMERA</button>
+        <button id="toggleAI" class="btn-ai">AI CUT-OUT: OFF</button>
+        <label>Scalare & Luminozitate</label>
+        <input type="range" id="camSize" min="10" max="250" value="80">
+        <input type="range" id="camBright" min="0" max="200" value="100">
+    </div>
+
+    <div class="card">
+        <h3>2. Camera Shatter FX (Tasta X)</h3>
+        <button id="toggleFX" class="btn-fx">SHATTER FX: OFF</button>
+        <label>Intensitate Shatter</label>
+        <input type="range" id="fxPower" min="0" max="50" value="10">
+        <label>Transparență FX</label>
+        <input type="range" id="fxAlpha" min="0" max="100" value="100">
+    </div>
+
+    <div class="card">
+        <h3>3. Fundal Studio</h3>
+        <select id="bgSourceType">
+            <option value="none">Negru</option>
+            <option value="photo">Imagine</option>
+            <option value="video">Video</option>
+        </select>
+        <input type="file" id="bgPhotoInp" style="display:none">
+        <input type="file" id="bgVideoInp" style="display:none">
+    </div>
+
+    <div id="layerContainer">
+        <h3>4. Obiecte (Taste 1-5)</h3>
+    </div>
 </div>
 
-<div id="controls">
-    <h1>TikTok Live Overlay</h1>
-    
-    <div class="card">
-        <h3>1. WebCam AI (Shatter Effect)</h3>
-        <button onclick="initCamera()">PORNEȘTE CAMERA</button>
-        <p class="hint">Tasta <kbd>1</kbd> sau primul Pad Novation pentru On/Off</p>
-    </div>
-
-    <div class="card">
-        <h3>2. Încarcă Surse (Video/Foto)</h3>
-        <input type="file" id="fileInput" multiple accept="video/*,image/*">
-        <p class="hint">Trage fișierele cu mouse-ul pentru a le poziționa. Se salvează automat.</p>
-    </div>
-
-    <div class="card">
-        <h3>3. Status Conexiune</h3>
-        <div id="midiStatus">Așteptare MIDI (Novation)...</div>
+<div class="main-stage">
+    <div id="canvas-container">
+        <canvas id="c_out"></canvas>
+        <button class="fs-btn" id="fsBtn">FULL SCREEN</button>
     </div>
 </div>
+
+<video id="v_raw" autoplay muted playsinline style="display:none"></video>
+<video id="v_bg" loop muted playsinline style="display:none"></video>
+<img id="img_bg" style="display:none">
 
 <script>
-// --- CONFIGURARE CANVAS ---
-const canvas = new fabric.Canvas('mainCanvas', {
-    preserveObjectStacking: true
-});
-
-// Memorie: Încărcare layout salvat
-const savedLayout = localStorage.getItem('novation_layout');
-if (savedLayout) {
-    canvas.loadFromJSON(savedLayout, canvas.renderAll.bind(canvas));
-}
-
-// Salvare automată la orice mișcare
-canvas.on('object:modified', () => {
-    localStorage.setItem('novation_layout', JSON.stringify(canvas));
-});
-
-// --- LOGICĂ WEBCAM + EFECT SPART (SHATTER) ---
-let videoElement = document.createElement('video');
-let cameraActive = false;
-let webcamObject = null;
-
-async function initCamera() {
-    const selfieSegmentation = new SelfieSegmentation({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
-    });
-
-    selfieSegmentation.setOptions({ modelSelection: 1 });
-    selfieSegmentation.onResults(onResults);
-
-    const camera = new Camera(videoElement, {
-        onFrame: async () => { await selfieSegmentation.send({image: videoElement}); },
-        width: 640, height: 480
-    });
-    camera.start();
-}
-
-function onResults(results) {
-    canvas.renderAll();
-    const ctx = canvas.getContext();
+    const video = document.getElementById('v_raw');
+    const canvas = document.getElementById('c_out');
+    const ctx = canvas.getContext('2d');
+    const bgVideo = document.getElementById('v_bg');
+    const bgImg = document.getElementById('img_bg');
     
-    // Dacă avem webcam-ul activ, desenăm masca cu efect
-    if (webcamObject && webcamObject.visible) {
-        ctx.save();
-        // Aici am putea adăuga efecte de tip Shader/Noise pe contur
-        // Pentru simplitate, folosim masca AI direct
-        // Mai departe putem integra un filter de "displacement"
-        ctx.restore();
-    }
-}
+    let aiActive = false, fxActive = false, selectedLayer = null;
+    const renderW = 1920, renderH = 1080;
 
-// --- ÎNCĂRCARE FIȘIERE ---
-document.getElementById('fileInput').onchange = function(e) {
-    const files = e.target.files;
-    for (let file of files) {
-        const url = URL.createObjectURL(file);
-        if (file.type.startsWith('video')) {
-            addVideoToCanvas(url);
-        } else {
-            fabric.Image.fromURL(url, (img) => {
-                img.scaleToWidth(200);
-                canvas.add(img);
-                canvas.setActiveObject(img);
-            });
+    const camState = { x: 400, y: 540, s: 80, b: 100, visible: true };
+    const fxState = { x: 1400, y: 540, s: 80, power: 10, alpha: 1, visible: false };
+    const layers = [];
+
+    // Setup MediaPipe
+    const selfie = new SelfieSegmentation({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`});
+    selfie.setOptions({ modelSelection: 1 });
+    selfie.onResults(onResults);
+
+    function onResults(results) {
+        canvas.width = renderW; canvas.height = renderH;
+        ctx.clearRect(0, 0, renderW, renderH);
+
+        // 1. Randare Fundal
+        const bgType = document.getElementById('bgSourceType').value;
+        if(bgType === 'photo' && bgImg.src) ctx.drawImage(bgImg, 0, 0, renderW, renderH);
+        else if(bgType === 'video' && bgVideo.readyState >= 2) ctx.drawImage(bgVideo, 0, 0, renderW, renderH);
+        else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,renderW,renderH); }
+
+        // 2. Randare Camera Standard
+        if(camState.visible) {
+            drawCamera(ctx, results, camState, false);
         }
+
+        // 3. Randare Camera Shatter FX
+        if(fxActive) {
+            drawCamera(ctx, results, fxState, true);
+        }
+
+        // 4. Randare Layere (Obiecte)
+        layers.forEach(l => {
+            if(l && l.visible && l.el) {
+                const w = renderW * (l.s/100);
+                const h = (l.el.videoHeight || l.el.height) / (l.el.videoWidth || l.el.width) * w;
+                ctx.drawImage(l.el, l.x - w/2, l.y - h/2, w, h);
+            }
+        });
     }
-};
 
-function addVideoToCanvas(url) {
-    const videoE = document.createElement('video');
-    videoE.src = url;
-    videoE.loop = true;
-    videoE.muted = true;
-    videoE.play();
+    function drawCamera(targetCtx, results, state, isFX) {
+        const w = renderW * (state.s / 100);
+        const h = (video.videoHeight / video.videoWidth) * w || w * 0.56;
+        let x = state.x - w/2;
+        let y = state.y - h/2;
 
-    const fabVideo = new fabric.Image(videoE, { left: 50, top: 50 });
-    canvas.add(fabVideo);
-    fabric.util.requestAnimFrame(function render() {
-        canvas.renderAll();
-        fabric.util.requestAnimFrame(render);
-    });
-}
+        targetCtx.save();
+        if(isFX) {
+            targetCtx.globalAlpha = state.alpha;
+            // Efectul Shatter (Distorsiune aleatorie)
+            x += (Math.random() - 0.5) * state.power;
+            y += (Math.random() - 0.5) * state.power;
+        }
 
-// --- CONTROL MIDI & TASTATURĂ ---
-window.addEventListener('keydown', (e) => {
-    const key = e.key; // 1, 2, 3...
-    triggerSlot(key);
-});
-
-if (navigator.requestMIDIAccess) {
-    navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
-}
-
-function onMIDISuccess(midiAccess) {
-    document.getElementById('midiStatus').innerHTML = "✅ Novation Conectat";
-    for (var input of midiAccess.inputs.values()) {
-        input.onmidimessage = (msg) => {
-            const [status, note, velocity] = msg.data;
-            if (velocity > 0) triggerSlot(note);
-        };
+        if (aiActive && results.segmentationMask) {
+            // Desenare cu decupaj AI
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = renderW; tempCanvas.height = renderH;
+            const tCtx = tempCanvas.getContext('2d');
+            
+            tCtx.drawImage(results.image, x, y, w, h);
+            tCtx.globalCompositeOperation = 'destination-in';
+            tCtx.drawImage(results.segmentationMask, x, y, w, h);
+            
+            targetCtx.drawImage(tempCanvas, 0, 0);
+        } else {
+            targetCtx.drawImage(video, x, y, w, h);
+        }
+        targetCtx.restore();
     }
-}
 
-function onMIDIFailure() {
-    document.getElementById('midiStatus').innerHTML = "❌ MIDI Indisponibil";
-}
-
-function triggerSlot(id) {
-    // Logica de On/Off pentru obiectele de pe ecran
-    const objects = canvas.getObjects();
-    // Exemplu: tasta 1 sau nota MIDI 36 controlează primul obiect
-    let target = (typeof id === 'string') ? parseInt(id) - 1 : id % 10; 
-    if (objects[target]) {
-        objects[target].visible = !objects[target].visible;
-        canvas.renderAll();
+    // Loop procesare
+    async function processLoop() {
+        if(video.readyState >= 2) await selfie.send({image: video});
+        requestAnimationFrame(processLoop);
     }
-}
+
+    // Handlers
+    document.getElementById('loadBtn').onclick = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
+        video.srcObject = stream; processLoop();
+    };
+
+    document.getElementById('toggleFX').onclick = () => {
+        fxActive = !fxActive;
+        document.getElementById('toggleFX').innerText = fxActive ? "SHATTER: ON" : "SHATTER: OFF";
+    };
+
+    document.getElementById('fxPower').oninput = (e) => fxState.power = e.target.value;
+    document.getElementById('fxAlpha').oninput = (e) => fxState.alpha = e.target.value / 100;
+    document.getElementById('camSize').oninput = (e) => camState.s = e.target.value;
+    
+    // Taste rapide
+    window.onkeydown = (e) => {
+        if(e.key === 'c') camState.visible = !camState.visible;
+        if(e.key === 'x') fxActive = !fxActive;
+        if(e.key >= 1 && e.key <= 5) {
+            if(layers[e.key]) layers[e.key].visible = !layers[e.key].visible;
+        }
+    };
+
+    // Inițializare Layere (1-5)
+    for (let i = 1; i <= 5; i++) {
+        layers[i] = { visible: false, x: 960, y: 540, s: 30, el: null };
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<h3>Layer ${i}</h3><input type="file" onchange="loadLayer(event, ${i})">`;
+        document.getElementById('layerContainer').appendChild(div);
+    }
+
+    function loadLayer(e, i) {
+        const file = e.target.files[0];
+        const url = URL.createObjectURL(file);
+        const img = new Image(); img.src = url; layers[i].el = img;
+    }
+
+    document.getElementById('bgSourceType').onchange = (e) => {
+        const val = e.target.value;
+        document.getElementById('bgPhotoInp').style.display = val === 'photo' ? 'block' : 'none';
+        document.getElementById('bgVideoInp').style.display = val === 'video' ? 'block' : 'none';
+    };
 </script>
-
 </body>
 </html>
